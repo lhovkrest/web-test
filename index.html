@@ -116,6 +116,54 @@
             text-align: center;
             color: #666;
             font-size: 14px;
+            margin-bottom: 30px;
+        }
+
+        .history-section {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .history-section h2 {
+            color: #333;
+            font-size: 20px;
+            margin-bottom: 20px;
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        th {
+            background: #f8f9fa;
+            color: #333;
+            font-weight: 600;
+            padding: 12px;
+            text-align: left;
+            border-bottom: 2px solid #dee2e6;
+            white-space: nowrap;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #e9ecef;
+            color: #666;
+        }
+
+        tbody tr:hover {
+            background: #f8f9fa;
+        }
+
+        tbody tr:last-child td {
+            border-bottom: none;
         }
 
         .loading {
@@ -166,7 +214,10 @@
         </header>
 
         <div id="content">
-            <div class="loading">Loading sensor data...</div>
+            <div id="currentReading">
+                <div class="loading">Loading sensor data...</div>
+            </div>
+            <div id="history"></div>
         </div>
     </div>
 
@@ -177,8 +228,9 @@
 
         async function fetchData() {
             try {
+                // Fetch all records ordered by newest first
                 const response = await fetch(
-                    `${SUPABASE_URL}/rest/v1/${TABLE_NAME}?select=*&order=created_at.desc&limit=1`,
+                    `${SUPABASE_URL}/rest/v1/${TABLE_NAME}?select=*&order=created_at.desc`,
                     {
                         headers: {
                             'apikey': SUPABASE_KEY,
@@ -198,8 +250,13 @@
                     return;
                 }
 
-                const reading = data[0];
-                displayData(reading);
+                // Display latest reading in cards
+                const latestReading = data[0];
+                displayData(latestReading);
+                
+                // Display all records in table
+                displayHistory(data);
+                
                 document.getElementById('statusText').textContent = 'Connected';
 
             } catch (error) {
@@ -286,7 +343,57 @@
                 </div>
             `;
 
-            document.getElementById('content').innerHTML = html;
+            document.getElementById('currentReading').innerHTML = html;
+        }
+
+        function displayHistory(records) {
+            let tableRows = '';
+            
+            records.forEach(record => {
+                const timestamp = record.created_at ? 
+                    new Date(record.created_at).toLocaleString() : 
+                    'N/A';
+                
+                tableRows += `
+                    <tr>
+                        <td>${timestamp}</td>
+                        <td>${record.moisture || 0}</td>
+                        <td>${record.temperature || 0}</td>
+                        <td>${record.conductivity || 0}</td>
+                        <td>${record.ph || 0}</td>
+                        <td>${record.nitrogen || 0}</td>
+                        <td>${record.phosphorus || 0}</td>
+                        <td>${record.potassium || 0}</td>
+                    </tr>
+                `;
+            });
+
+            const html = `
+                <div class="history-section">
+                    <h2>📊 Historical Records (${records.length} total)</h2>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Moisture (%)</th>
+                                    <th>Temp (°C)</th>
+                                    <th>Conductivity (µS/cm)</th>
+                                    <th>pH</th>
+                                    <th>N (mg/kg)</th>
+                                    <th>P (mg/kg)</th>
+                                    <th>K (mg/kg)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${tableRows}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('history').innerHTML = html;
         }
 
         // Initial load
