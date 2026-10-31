@@ -53,6 +53,8 @@ td{padding:3px 0;border-bottom:1px solid #2a3140}td+td{text-align:right}
   <label><input type="radio" name="ax" value="barrel"> Along the top edge</label></div>
   <label>Sensor source</label>
   <select id="src"><option value="orient">DeviceOrientation (all phones)</option><option value="sensor">Sensor API (Chrome on Android)</option></select>
+  <label>Aim source</label>
+  <select id="fu"><option value="gyro">Raw gyro + orientation (fast)</option><option value="orient">Orientation only (OS-filtered)</option></select>
   <p id="pbtns"></p>
 </template>
 
@@ -81,37 +83,38 @@ function vecOf(r,ax){const d=ax==='screen'?[0,0,-1]:[0,1,0];
   return[[cA*cG-sA*sB*sG,-sA*cB,cA*sG+sA*sB*cG],[sA*cG+cA*sB*sG,cA*cB,sA*sG-cA*sB*cG],[-cB*sG,sB,cB*cG]].map(m=>m[0]*d[0]+m[1]*d[1]+m[2]*d[2])}
 
 /* =============== PHONE (controller) =============== */
-const P={axis:'screen',src:'orient',n:0,cnt:0,on:false};
+const P={axis:'screen',src:'orient',fu:'gyro',n:0,cnt:0,mc:0,oc:0,on:false};
 function showPhone(id){showPanel('');$('#panel').appendChild($('#phoneT').content.cloneNode(true));
   $('#pbtns').innerHTML=(id?`<button class="go" onclick="phoneGo('${id.replace(/[^\w.-]/g,'')}')">Connect to computer</button> `:'')+`<button class="${id?'':'go'}" onclick="phoneGo()">Scan QR code</button>`}
 function setPad(t){$('#ps').textContent=t}
 function sendS(t,v){if(P.conn&&P.conn.open){P.conn.send({k:'s',n:++P.n,t,v,g:P.gyro?1:0});P.cnt++}}
 async function phoneGo(id){
-  P.axis=document.querySelector('input[name=ax]:checked').value;P.src=$('#src').value;
+  P.axis=document.querySelector('input[name=ax]:checked').value;P.src=$('#src').value;P.fu=$('#fu').value;
   try{if(DeviceOrientationEvent.requestPermission){const r=await DeviceOrientationEvent.requestPermission();if(r!=='granted'){showPanel('<h1>Motion access denied</h1><p>Allow motion and orientation access for this site, then reload.</p>');return}}}catch(e){}
   try{if(DeviceMotionEvent.requestPermission)await DeviceMotionEvent.requestPermission()}catch(e){}
   try{await document.documentElement.requestFullscreen();await screen.orientation.lock('landscape')}catch(e){}
   try{navigator.wakeLock&&navigator.wakeLock.request('screen')}catch(e){}
   if(!P.on){P.on=true;let ok=false;
     if(P.src==='sensor'&&'RelativeOrientationSensor' in window){try{const s=new RelativeOrientationSensor({frequency:120,referenceFrame:'device'});
-      s.onreading=()=>refQ(s.timestamp,Array.from(s.quaternion));s.onerror=()=>{if(!P.cnt)addEventListener('deviceorientation',pOri)};s.start();ok=true}catch(e){}}
+      s.onreading=()=>{P.oc++;refQ(s.timestamp,Array.from(s.quaternion))};s.onerror=()=>{if(!P.cnt)addEventListener('deviceorientation',pOri)};s.start();ok=true}catch(e){}}
     if(!ok)addEventListener('deviceorientation',pOri);
     addEventListener('devicemotion',pMot);}
   if(!id)id=await scan();if(!id)return;
   $('#pad').style.display='flex';hidePanel();setPad('Connecting...');
   const pr=new Peer();P.peer=pr;
   pr.on('open',()=>{const c=pr.connect(id,{serialization:'json',reliable:false});P.conn=c;
-    c.on('open',()=>{P.n=0;c.send({k:'c',axis:P.axis,src:P.src});setPad('Connected. Aim at the computer screen. Tap to fire.')});
+    c.on('open',()=>{P.n=0;c.send({k:'c',axis:P.axis,src:P.src});setPad('Connected. Aim at the computer screen. Tap to fire. Tap with a second finger to recenter.')});
     c.on('data',d=>{if(d.k==='p')c.send({k:'q',t0:d.t0,t1:performance.now()})});
     c.on('close',()=>setPad('Disconnected. Reload this page and scan again.'))});
   pr.on('error',e=>setPad('Could not connect ('+e.type+'). Check that the QR code on the computer is current.'));
-  setInterval(()=>{$('#pn').textContent=P.conn&&P.conn.open?`sending ${P.cnt} samples/s`:'';P.cnt=0},1000);
-  $('#pad').addEventListener('pointerdown',e=>{if(P.conn&&P.conn.open){P.conn.send({k:'f',t:e.timeStamp});navigator.vibrate&&navigator.vibrate(15);
+  setInterval(()=>{const o=P.conn&&P.conn.open;$('#pn').textContent=o?`sending ${P.cnt}/s   gyro ${P.mc} Hz   orientation ${P.oc} Hz`:'';
+    if(o)P.conn.send({k:'i',mc:P.mc,oc:P.oc});P.cnt=P.mc=P.oc=0},1000);
+  $('#pad').addEventListener('pointerdown',e=>{if(P.conn&&P.conn.open){if(!e.isPrimary){P.conn.send({k:'r'});navigator.vibrate&&navigator.vibrate([20,40,20]);return}P.conn.send({k:'f',t:e.timeStamp});navigator.vibrate&&navigator.vibrate(15);
     $('#pad').classList.add('flash');setTimeout(()=>$('#pad').classList.remove('flash'),90)}});}
 /* Fusion: integrate the raw gyro every motion event (low latency, no Euler angles, so no gimbal
    trouble when the phone is rolled 90 degrees), and pull gently toward the OS-fused orientation
    to cancel drift. Correction is strong when still and weak while moving, so it never fights a fast aim. */
-const Q={q:null,rt:0,t:0,w:0};
+const Q={q:null,rt:0,t:0,w:0,still:0};
 const qm=(a,b)=>[a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1],a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0],a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3],a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2]];
 const nq=q=>{const n=Math.hypot(...q)||1;return q.map(v=>v/n)};
 function eul2q(a,b,g){a*=R/2;b*=R/2;g*=R/2;return qm(qm([0,0,Math.sin(a),Math.cos(a)],[Math.sin(b),0,0,Math.cos(b)]),[0,Math.sin(g),0,Math.cos(g)])}
