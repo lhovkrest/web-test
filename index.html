@@ -8,6 +8,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
 <style>
 :root{--bg:#12151b;--ink:#e9e6dd;--dim:#8c94a3;--hot:#ff5a36;--cool:#6fd3e3;--panel:#1a1f28f2;--line:#3a4456}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -18,46 +21,39 @@ button{font:inherit;color:var(--ink);background:#262d3a;border:1px solid var(--l
 button.on{background:var(--hot);border-color:var(--hot);color:#12151b;font-weight:600}
 button.go{background:var(--cool);border-color:var(--cool);color:#12151b;font-weight:600;padding:9px 16px}
 #msg{position:fixed;top:max(48px,calc(env(safe-area-inset-top) + 42px));left:50%;transform:translateX(-50%);color:var(--dim);text-align:center;pointer-events:none;width:90%}
-#hud{position:fixed;right:max(8px,env(safe-area-inset-right));bottom:max(6px,env(safe-area-inset-bottom));font-size:10.5px;color:var(--dim);white-space:pre;font-variant-numeric:tabular-nums;pointer-events:none;text-align:left}
-#panel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:calc(100% - 24px);max-width:460px;max-height:88vh;overflow:auto;touch-action:pan-y;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;z-index:9}
+#hud{position:fixed;right:max(8px,env(safe-area-inset-right));bottom:max(6px,env(safe-area-inset-bottom));font-size:10.5px;color:var(--dim);white-space:pre;font-variant-numeric:tabular-nums;pointer-events:none}
+#panel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:calc(100% - 24px);max-width:460px;max-height:90vh;overflow:auto;touch-action:pan-y;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;z-index:9}
 #panel h1{font-size:20px;margin:0 0 6px}
 #panel p{margin:6px 0;color:var(--dim)}
 #panel label{display:block;margin:8px 0 2px}
 #panel select,#panel input[type=range]{width:100%}
 #panel select{font:inherit;background:#262d3a;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px}
-.row{display:flex;gap:16px;margin:4px 0}
-.row label{margin:0;display:flex;gap:6px;align-items:center}
+.row{display:flex;gap:16px;margin:4px 0}.row label{margin:0;display:flex;gap:6px;align-items:center}
 table{border-collapse:collapse;width:100%;margin:8px 0;font-variant-numeric:tabular-nums}
 td{padding:3px 0;border-bottom:1px solid #2a3140}td+td{text-align:right}
+#qr{background:#fff;padding:8px;border-radius:8px;width:max-content;max-width:100%;margin:8px auto}#qr svg{display:block;width:210px;height:210px}
+#pad{position:fixed;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:24px;font-size:20px;z-index:8;background:var(--bg);flex-direction:column;gap:10px}
+#pad.flash{background:#3a1f19}#pn{font-size:12px;color:var(--dim)}
 </style>
 </head>
 <body>
 <canvas id="cv"></canvas>
 <div id="bar">
   <button data-m="aim">Aim</button><button data-m="targets">Targets</button><button data-m="drift">Drift</button>
-  <button id="bCal">Calibrate</button><button id="bRec">Recenter</button><button id="bSet">Setup</button>
+  <button id="bCal">Calibrate</button><button id="bRec">Recenter</button><button id="bPair">Pair</button>
 </div>
-<div id="msg"></div>
-<div id="hud"></div>
-<div id="panel"></div>
+<div id="msg"></div><div id="hud"></div><div id="panel"></div>
+<div id="pad"><div id="ps"></div><div id="pn"></div></div>
 
-<template id="setupT">
-  <h1>Gyro Aim Lab</h1>
-  <p>Hold the phone in landscape, upright, like a light gun. Calibrate first, then check how accurate and how fast the aim is.</p>
+<template id="phoneT">
+  <h1>Phone controller</h1>
+  <p>Hold the phone in landscape, upright, like a light gun. The computer shows the targets.</p>
   <label>Pointing direction</label>
-  <div class="row">
-    <label><input type="radio" name="ax" value="screen" checked> Into the screen</label>
-    <label><input type="radio" name="ax" value="barrel"> Along the top edge</label>
-  </div>
+  <div class="row"><label><input type="radio" name="ax" value="screen" checked> Into the screen</label>
+  <label><input type="radio" name="ax" value="barrel"> Along the top edge</label></div>
   <label>Sensor source</label>
-  <select id="src">
-    <option value="orient">DeviceOrientation (all phones)</option>
-    <option value="sensor">Sensor API (Chrome on Android, can be faster)</option>
-  </select>
-  <label>Smoothing <output id="smo">0</output></label>
-  <input type="range" id="sm" min="0" max="0.9" step="0.05" value="0" oninput="smo.value=this.value">
-  <p>Smoothing hides jitter but adds lag. Start at 0.</p>
-  <p><button class="go" onclick="start()">Start sensors</button></p>
+  <select id="src"><option value="orient">DeviceOrientation (all phones)</option><option value="sensor">Sensor API (Chrome on Android)</option></select>
+  <p id="pbtns"></p>
 </template>
 
 <script>
@@ -68,94 +64,125 @@ const mean=a=>a.reduce((s,v)=>s+v,0)/(a.length||1);
 const sd=a=>{const m=mean(a);return Math.sqrt(mean(a.map(v=>(v-m)**2)))};
 const pct=(a,p)=>{if(!a.length)return 0;const s=[...a].sort((x,y)=>x-y);return s[Math.min(s.length-1,Math.floor(p*s.length))]};
 const SEQ=[[.5,.5],[.15,.2],[.5,.5],[.85,.2],[.5,.5],[.85,.8],[.5,.5],[.15,.8],[.5,.5]];
+const qs=new URLSearchParams(location.search);
 let W=0,H=0;
 function resize(){const r=devicePixelRatio||1;W=innerWidth;H=innerHeight;cv.width=W*r;cv.height=H*r;cx.setTransform(r,0,0,r,0,0)}
 addEventListener('resize',resize);resize();
+function showPanel(h){$('#panel').innerHTML=h;$('#panel').style.display='block'}
+function hidePanel(){$('#panel').style.display='none'}
+const setMsg=t=>$('#msg').textContent=t;
 
-const st={axis:'screen',src:'orient',smooth:0,raw:null,evT:0,latT:0,iv:[],lat:[],mIv:[],mT:0,ft:[],hist:[],fx:[],
-  init:0,sy:0,sp:0,ry:0,rp:0,x:0,y:0,mode:'idle',started:false,busy:false,hudT:0,
-  cal:{yc:0,pc:0,xm:0,ym:0,dw:60,dh:34}};
-
-/* ---------- sensors ---------- */
-function onOri(e){if(e.alpha==null)return;const t=e.timeStamp;if(st.evT)st.iv.push(t-st.evT);if(st.iv.length>120)st.iv.shift();st.evT=t;st.raw={a:e.alpha,b:e.beta,g:e.gamma}}
-function onMot(e){const t=e.timeStamp;if(st.mT)st.mIv.push(t-st.mT);if(st.mIv.length>120)st.mIv.shift();st.mT=t}
-function devAxis(){return st.axis==='screen'?[0,0,-1]:[0,1,0]}
-/* Pointing vector in earth frame (x east, y north, z up). Uses the full rotation matrix, so the
-   alpha/beta/gamma flip near landscape-upright (gamma = +-90) does not matter. */
-function vecNow(){const r=st.raw,d=devAxis();
+/* pointing vector in the earth frame (x east, y north, z up); full rotation matrix, so the
+   alpha/beta/gamma flip at landscape-upright does not matter */
+function vecOf(r,ax){const d=ax==='screen'?[0,0,-1]:[0,1,0];
   if(r.q){const [x,y,z,w]=r.q,tx=2*(y*d[2]-z*d[1]),ty=2*(z*d[0]-x*d[2]),tz=2*(x*d[1]-y*d[0]);
     return[d[0]+w*tx+(y*tz-z*ty),d[1]+w*ty+(z*tx-x*tz),d[2]+w*tz+(x*ty-y*tx)]}
   const a=r.a*R,b=r.b*R,g=r.g*R,cA=Math.cos(a),sA=Math.sin(a),cB=Math.cos(b),sB=Math.sin(b),cG=Math.cos(g),sG=Math.sin(g);
   return[[cA*cG-sA*sB*sG,-sA*cB,cA*sG+sA*sB*cG],[sA*cG+cA*sB*sG,cA*cB,sA*sG-cA*sB*cG],[-cB*sG,sB,cB*cG]].map(m=>m[0]*d[0]+m[1]*d[1]+m[2]*d[2])}
 
-async function start(){
-  st.axis=document.querySelector('input[name=ax]:checked').value;st.smooth=+$('#sm').value;
-  loadCal();
-  if(st.started){st.init=0;hidePanel();setMode('aim');return}
-  try{if(DeviceOrientationEvent.requestPermission){const r=await DeviceOrientationEvent.requestPermission();if(r!=='granted'){showPanel('<h1>Motion access denied</h1><p>Allow motion and orientation access for this site in your browser settings, then reload.</p>');return}}}catch(e){}
-  try{if(DeviceMotionEvent.requestPermission)await DeviceMotionEvent.requestPermission()}catch(e){}
-  st.src=$('#src').value;let ok=false;
-  if(st.src==='sensor'&&'RelativeOrientationSensor' in window){
-    try{const s=new RelativeOrientationSensor({frequency:120,referenceFrame:'device'});
-      s.onreading=()=>{const t=s.timestamp;if(st.evT)st.iv.push(t-st.evT);if(st.iv.length>120)st.iv.shift();st.evT=t;st.raw={q:s.quaternion}};
-      s.onerror=()=>{if(!st.raw){st.src='orient';addEventListener('deviceorientation',onOri)}};
-      s.start();ok=true}catch(e){}}
-  if(!ok){st.src='orient';addEventListener('deviceorientation',onOri)}
-  addEventListener('devicemotion',onMot);
+/* =============== PHONE (controller) =============== */
+const P={axis:'screen',src:'orient',n:0,cnt:0,on:false};
+function showPhone(id){showPanel('');$('#panel').appendChild($('#phoneT').content.cloneNode(true));
+  $('#pbtns').innerHTML=(id?`<button class="go" onclick="phoneGo('${id.replace(/[^\w.-]/g,'')}')">Connect to computer</button> `:'')+`<button class="${id?'':'go'}" onclick="phoneGo()">Scan QR code</button>`}
+function setPad(t){$('#ps').textContent=t}
+function sendS(t,v){if(P.conn&&P.conn.open){P.conn.send({k:'s',n:++P.n,t,v});P.cnt++}}
+async function phoneGo(id){
+  P.axis=document.querySelector('input[name=ax]:checked').value;P.src=$('#src').value;
+  try{if(DeviceOrientationEvent.requestPermission){const r=await DeviceOrientationEvent.requestPermission();if(r!=='granted'){showPanel('<h1>Motion access denied</h1><p>Allow motion and orientation access for this site, then reload.</p>');return}}}catch(e){}
   try{await document.documentElement.requestFullscreen();await screen.orientation.lock('landscape')}catch(e){}
   try{navigator.wakeLock&&navigator.wakeLock.request('screen')}catch(e){}
-  st.started=true;hidePanel();$('#bar').style.display='flex';setMode('aim');
-  setTimeout(()=>{if(!st.raw)showPanel('<h1>No sensor data</h1><p>This needs a phone with motion sensors and an https address. Desktop browsers usually have none.</p><button onclick="hidePanel()">Close</button>')},1500);
-}
+  if(!P.on){P.on=true;let ok=false;
+    if(P.src==='sensor'&&'RelativeOrientationSensor' in window){try{const s=new RelativeOrientationSensor({frequency:120,referenceFrame:'device'});
+      s.onreading=()=>sendS(s.timestamp,vecOf({q:s.quaternion},P.axis));s.onerror=()=>{if(!P.cnt)addEventListener('deviceorientation',pOri)};s.start();ok=true}catch(e){}}
+    if(!ok)addEventListener('deviceorientation',pOri);}
+  if(!id)id=await scan();if(!id)return;
+  $('#pad').style.display='flex';hidePanel();setPad('Connecting...');
+  const pr=new Peer();P.peer=pr;
+  pr.on('open',()=>{const c=pr.connect(id,{serialization:'json',reliable:false});P.conn=c;
+    c.on('open',()=>{P.n=0;c.send({k:'c',axis:P.axis,src:P.src});setPad('Connected. Aim at the computer screen. Tap to fire.')});
+    c.on('data',d=>{if(d.k==='p')c.send({k:'q',t0:d.t0,t1:performance.now()})});
+    c.on('close',()=>setPad('Disconnected. Reload this page and scan again.'))});
+  pr.on('error',e=>setPad('Could not connect ('+e.type+'). Check that the QR code on the computer is current.'));
+  setInterval(()=>{$('#pn').textContent=P.conn&&P.conn.open?`sending ${P.cnt} samples/s`:'';P.cnt=0},1000);
+  $('#pad').addEventListener('pointerdown',e=>{if(P.conn&&P.conn.open){P.conn.send({k:'f',t:e.timeStamp});navigator.vibrate&&navigator.vibrate(15);
+    $('#pad').classList.add('flash');setTimeout(()=>$('#pad').classList.remove('flash'),90)}});}
+function pOri(e){if(e.alpha!=null)sendS(e.timeStamp,vecOf({a:e.alpha,b:e.beta,g:e.gamma},P.axis))}
+function scan(){return new Promise(async res=>{
+  showPanel('<h1>Scan the QR code</h1><p>Point the camera at the code on the computer screen.</p>');
+  const v=document.createElement('video');v.setAttribute('playsinline','');v.muted=true;v.style.cssText='width:100%;border-radius:8px';$('#panel').appendChild(v);
+  let stream;try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}})}catch(e){
+    showPanel('<h1>Camera blocked</h1><p>Allow camera access, or scan the code with the phone\'s own camera app instead.</p>');return res(null)}
+  v.srcObject=stream;await v.play();const c=document.createElement('canvas'),g=c.getContext('2d',{willReadFrequently:true});
+  const tick=()=>{if(v.readyState>=2){c.width=v.videoWidth/2|0;c.height=v.videoHeight/2|0;g.drawImage(v,0,0,c.width,c.height);
+    const r=jsQR(g.getImageData(0,0,c.width,c.height).data,c.width,c.height),m=r&&/pair=([\w.-]+)/.exec(r.data);
+    if(m){stream.getTracks().forEach(t=>t.stop());return res(m[1])}}requestAnimationFrame(tick)};tick()})}
+
+/* =============== PC (display) =============== */
+const st={axis:'screen',smooth:0,v:null,evT:0,latT:0,iv:[],ai:[],lat:[],rtt:[],offs:[],off:null,n:0,pt:0,la:0,linked:false,
+  ft:[],hist:[],fx:[],init:0,sy:0,sp:0,ry:0,rp:0,x:0,y:0,mode:'idle',busy:false,hudT:0,
+  cal:{yc:0,pc:0,xm:0,ym:0,dw:60,dh:34}};
+function startPC(){$('#bar').style.display='flex';
+  st.id='gal-'+Math.random().toString(36).slice(2,8);
+  st.peer=new Peer(st.id);st.peer.on('open',()=>showPair());st.peer.on('connection',onConn);
+  st.peer.on('error',e=>showPair('Pairing server problem: '+e.type+'. Reload to try again.'));
+  setMode('wait');showPanel('<h1>Starting...</h1>')}
+function showPair(note){const url=location.origin+location.pathname+'?pair='+st.id,q=qrcode(0,'M');q.addData(url);q.make();
+  showPanel(`<h1>Pair your phone</h1><p>${note||'Open this site on the phone and tap Scan QR code, or scan this with the phone\'s camera app.'}</p><div id="qr">${q.createSvgTag(5,2)}</div>
+  <label>Smoothing <output id="smo">${st.smooth}</output></label><input type="range" min="0" max="0.9" step="0.05" value="${st.smooth}" oninput="st.smooth=+this.value;smo.value=this.value">
+  <p>Smoothing hides jitter but adds lag. Start at 0.</p>${st.linked?'<button class="go" onclick="hidePanel()">Close</button>':''}`)}
+function onConn(c){if(st.conn){try{st.conn.close()}catch(e){}}
+  st.conn=c;c.on('open',()=>{st.linked=true;st.init=0;st.n=0;st.pt=0;st.la=0;st.off=null;st.offs=[];st.rtt=[];hidePanel();setMode('aim');
+    clearInterval(st.pi);st.pi=setInterval(()=>c.send({k:'p',t0:performance.now()}),500)});
+  c.on('data',onData);
+  c.on('close',()=>{if(st.conn===c){st.conn=null;st.linked=false;clearInterval(st.pi);showPair('Phone disconnected. Scan again to reconnect.')}})}
+function onData(d){const now=performance.now();
+  if(d.k==='s'){if(d.n<st.n)return;st.n=d.n;if(st.pt)st.iv.push(d.t-st.pt);if(st.iv.length>120)st.iv.shift();st.pt=d.t;
+    if(st.la)st.ai.push(now-st.la);if(st.ai.length>120)st.ai.shift();st.la=now;st.v=d.v;st.evT=d.t}
+  else if(d.k==='f')fireAt(st.off==null?now:d.t-st.off);
+  else if(d.k==='q'){const r=now-d.t0;st.rtt.push(r);if(st.rtt.length>100)st.rtt.shift();
+    st.offs.push({r,o:d.t1-(d.t0+r/2)});if(st.offs.length>20)st.offs.shift();st.off=st.offs.reduce((a,b)=>b.r<a.r?b:a).o}
+  else if(d.k==='c'){st.axis=d.axis;loadCal();st.init=0}}
 function loadCal(){try{const j=JSON.parse(localStorage.getItem('gal-'+st.axis));if(j&&j.dw){st.cal.dw=j.dw;st.cal.dh=j.dh}}catch(e){}}
 function saveCal(){try{localStorage.setItem('gal-'+st.axis,JSON.stringify({dw:st.cal.dw,dh:st.cal.dh}))}catch(e){}}
-
-/* ---------- ui ---------- */
-function showPanel(h){$('#panel').innerHTML=h;$('#panel').style.display='block'}
-function hidePanel(){$('#panel').style.display='none'}
-function showSetup(){showPanel('');$('#panel').appendChild($('#setupT').content.cloneNode(true));
-  document.querySelector(`input[name=ax][value=${st.axis}]`).checked=true;$('#sm').value=st.smooth;$('#smo').value=st.smooth;
-  if(st.started){$('#src').value=st.src;$('#src').disabled=true;document.querySelector('.go').textContent='Apply'}}
-const setMsg=t=>$('#msg').textContent=t;
 function setMode(m){st.mode=m;st.dr=null;st.tgt=null;st.cap=null;st.tapRes=null;st.busy=false;
   document.querySelectorAll('[data-m]').forEach(b=>b.classList.toggle('on',b.dataset.m===m));
-  if(m==='aim')setMsg('Free aim. Tap to fire.');
-  if(m==='targets'){st.ti=0;st.tr=[];setMsg('Tap to fire at each target (1/'+SEQ.length+')')}
+  if(m==='wait')setMsg('');
+  if(m==='aim')setMsg('Free aim. Tap the phone to fire.');
+  if(m==='targets'){st.ti=0;st.tr=[];setMsg('Tap the phone to fire at each target (1/'+SEQ.length+')')}
   if(m==='drift')setMsg('Rest the phone still, aimed at the center, then tap to start a 30 s run.')}
 document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{hidePanel();setMode(b.dataset.m)});
-$('#bCal').onclick=calibrate;$('#bRec').onclick=recenter;$('#bSet').onclick=showSetup;
+$('#bCal').onclick=calibrate;$('#bRec').onclick=recenter;$('#bPair').onclick=()=>showPair();
 function recenter(){const c=st.cal;c.yc=st.ry;c.pc=st.rp;c.xm=0;c.ym=0;st.sy=st.ry;st.sp=st.rp}
 
-/* ---------- calibration ---------- */
+/* calibration: aim at 5 targets on the computer screen, tap the phone, hold still */
 const capture=()=>new Promise(res=>{st.cap={t0:performance.now(),s:[],p:0,res}});
 function stepCap(now){const q=st.cap,t=now-q.t0;q.p=t/2200;if(t>1500)q.s.push([st.ry,st.rp]);
   if(t>2200){st.cap=null;if(!q.s.length)q.s.push([st.ry,st.rp]);const y0=q.s[0][0],ys=q.s.map(s=>wrap(s[0]-y0)),ps=q.s.map(s=>s[1]);
     q.res({y:y0+mean(ys),p:mean(ps),sy:sd(ys),sp:sd(ps)})}}
 async function calibrate(){
-  if(st.busy||!st.raw)return;setMode('cal');st.busy=true;hidePanel();
+  if(st.busy||!st.linked)return;setMode('cal');st.busy=true;hidePanel();
   const steps=[['center',.5,.5],['left',.12,.5],['right',.88,.5],['top',.5,.16],['bottom',.5,.84]],o={};let i=0;
   for(const [n,fx,fy] of steps){
-    st.tgt={x:fx*W,y:fy*H};i++;setMsg(`${i}/5  Point at the ${n} target, tap, then hold still`);
+    st.tgt={x:fx*W,y:fy*H};i++;setMsg(`${i}/5  Point the phone at the ${n} target, tap it, then hold still`);
     await new Promise(r=>st.tapRes=r);if(st.mode!=='cal')return;
-    setMsg('Hold still...');o[n]=await capture();if(st.mode!=='cal')return;navigator.vibrate&&navigator.vibrate(30)}
+    setMsg('Hold still...');o[n]=await capture();if(st.mode!=='cal')return}
   const dL=wrap(o.left.y-o.center.y),dR=wrap(o.right.y-o.center.y),pT=o.top.p-o.center.p,pB=o.bottom.p-o.center.p;
-  if(dR-dL<5||pT-pB<5){setMode('aim');showPanel('<h1>Calibration failed</h1><p>The phone barely moved between targets. Turn it more, or check that it is pointing the way you chose in Setup.</p><button onclick="hidePanel()">Close</button>');return}
+  if(dR-dL<5||pT-pB<5){setMode('aim');showPanel('<h1>Calibration failed</h1><p>The phone barely moved between targets. Turn it more, or check the pointing direction chosen on the phone.</p><button onclick="hidePanel()">Close</button>');return}
   Object.assign(st.cal,{yc:o.center.y,pc:o.center.p,xm:(dL+dR)/2,ym:(pT+pB)/2,dw:(dR-dL)/.76,dh:(pT-pB)/.68});saveCal();
   const c=o.center;setMode('aim');
   showPanel(`<h1>Calibrated</h1><table><tr><td>Screen width covers</td><td>${st.cal.dw.toFixed(1)}&deg;</td></tr><tr><td>Screen height covers</td><td>${st.cal.dh.toFixed(1)}&deg;</td></tr><tr><td>Hold-still noise (yaw)</td><td>&plusmn;${c.sy.toFixed(3)}&deg;</td></tr><tr><td>Hold-still noise (pitch)</td><td>&plusmn;${c.sp.toFixed(3)}&deg;</td></tr></table><p>The faint grid is drawn every 10&deg;. Try Targets next.</p><button class="go" onclick="hidePanel()">Done</button>`)}
 
-/* ---------- tests ---------- */
+/* tests */
 function histAt(ts){let p={x:st.x,y:st.y};for(const h of st.hist){if(h.t<=ts)p=h;else break}return p}
-function fire(e){
+function fireAt(ts){
   if(st.tapRes){const r=st.tapRes;st.tapRes=null;r();return}
-  if(!st.started||$('#panel').style.display==='block')return;
-  const p=histAt(e.timeStamp);st.fx.push({x:p.x,y:p.y,t:performance.now()});
+  if(!st.linked||$('#panel').style.display==='block')return;
+  const p=histAt(ts);st.fx.push({x:p.x,y:p.y,t:performance.now()});
   if(st.mode==='targets')hitTarget(p);
   else if(st.mode==='drift'&&!st.dr){st.dr={t0:0,s:[],max:0,dy:0,dp:0,t:0};setMsg('Hold still for 30 s')}}
-cv.addEventListener('pointerdown',fire);
 function hitTarget(p){const [fx,fy]=SEQ[st.ti],c=st.cal,dx=p.x-fx*W,dy=p.y-fy*H,px=Math.hypot(dx,dy);
   st.tr.push({px,deg:Math.hypot(dx/(W/c.dw),dy/(H/c.dh)),ctr:fx===.5,hit:px<=TR});st.ti++;
-  if(st.ti<SEQ.length){setMsg(`Tap to fire at each target (${st.ti+1}/${SEQ.length})`);return}
+  if(st.ti<SEQ.length){setMsg(`Tap the phone to fire at each target (${st.ti+1}/${SEQ.length})`);return}
   const t=st.tr,cr=t.filter(r=>r.ctr);setMode('aim');
   showPanel(`<h1>Target test</h1><table><tr><td>Hits (within ${TR}px)</td><td>${t.filter(r=>r.hit).length} / ${t.length}</td></tr><tr><td>Mean error</td><td>${mean(t.map(r=>r.deg)).toFixed(2)}&deg;</td></tr><tr><td>Worst error</td><td>${Math.max(...t.map(r=>r.deg)).toFixed(2)}&deg;</td></tr><tr><td>Return-to-center error</td><td>${mean(cr.map(r=>r.deg)).toFixed(2)}&deg;</td></tr></table><p>Return-to-center shows drift and repeatability: you leave the middle, come back, and see how far off it lands.</p><button class="go" onclick="hidePanel();setMode('targets')">Run again</button> <button onclick="hidePanel()">Close</button>`)}
 function stepDrift(now){const d=st.dr;if(!d.t0){d.t0=now;d.y0=st.ry;d.p0=st.rp}
@@ -163,17 +190,17 @@ function stepDrift(now){const d=st.dr;if(!d.t0){d.t0=now;d.y0=st.ry;d.p0=st.rp}
   if(d.t<30)return;st.dr=null;const end=Math.hypot(d.dy,d.dp);setMode('aim');
   showPanel(`<h1>Drift test, 30 s</h1><table><tr><td>Yaw drift</td><td>${d.dy.toFixed(2)}&deg;</td></tr><tr><td>Pitch drift</td><td>${d.dp.toFixed(2)}&deg;</td></tr><tr><td>Drift rate</td><td>${(end*2).toFixed(2)}&deg; / min</td></tr><tr><td>Largest excursion</td><td>${d.max.toFixed(2)}&deg;</td></tr><tr><td>Spread (std dev)</td><td>&plusmn;${sd(d.s.map(s=>s[0])).toFixed(3)}&deg; / ${sd(d.s.map(s=>s[1])).toFixed(3)}&deg;</td></tr></table><p>Yaw usually drifts more than pitch, because gravity corrects pitch but nothing corrects yaw.</p><button class="go" onclick="hidePanel();setMode('drift')">Run again</button> <button onclick="hidePanel()">Close</button>`)}
 
-/* ---------- loop ---------- */
+/* loop */
 function frame(now){
   requestAnimationFrame(frame);
   st.ft.push(now);if(st.ft.length>60)st.ft.shift();
   const c=st.cal;
-  if(st.raw){
-    const v=vecNow(),ry=Math.atan2(v[0],v[1])*D,rp=Math.asin(Math.max(-1,Math.min(1,v[2])))*D;
+  if(st.v&&st.linked){
+    const v=st.v,ry=Math.atan2(v[0],v[1])*D,rp=Math.asin(Math.max(-1,Math.min(1,v[2])))*D;
     st.ry=ry;st.rp=rp;
     if(!st.init){st.init=1;st.sy=ry;st.sp=rp;c.yc=ry;c.pc=rp;c.xm=0;c.ym=0}
     const k=st.smooth;st.sy+=wrap(ry-st.sy)*(1-k);st.sp+=(rp-st.sp)*(1-k);
-    if(st.evT!==st.latT){st.latT=st.evT;const l=now-st.evT;if(l>=0&&l<1000){st.lat.push(l);if(st.lat.length>300)st.lat.shift()}}
+    if(st.evT!==st.latT&&st.off!=null){st.latT=st.evT;const l=now-(st.evT-st.off);if(l>-50&&l<1000){st.lat.push(l);if(st.lat.length>300)st.lat.shift()}}
     st.x=Math.max(0,Math.min(W,W/2+(wrap(st.sy-c.yc)-c.xm)*(W/c.dw)));
     st.y=Math.max(0,Math.min(H,H/2-(st.sp-c.pc-c.ym)*(H/c.dh)));
     st.hist.push({t:now,x:st.x,y:st.y});while(st.hist.length&&now-st.hist[0].t>600)st.hist.shift();
@@ -194,14 +221,17 @@ function draw(now){
     if(d){cx.font="16px 'Chakra Petch',system-ui";cx.fillStyle='#8c94a3';cx.fillText(`yaw ${d.dy.toFixed(2)}\u00b0   pitch ${d.dp.toFixed(2)}\u00b0`,W/2,H*.35+26)}}
   st.fx=st.fx.filter(f=>now-f.t<300);
   for(const f of st.fx)ring(f.x,f.y,8+(now-f.t)/6,`rgba(255,90,54,${1-(now-f.t)/300})`,2);
-  if(st.raw){const x=st.x,y=st.y;cx.strokeStyle='#ff5a36';cx.lineWidth=2;cx.beginPath();cx.arc(x,y,12,0,7);
+  if(st.v&&st.linked){const x=st.x,y=st.y;cx.strokeStyle='#ff5a36';cx.lineWidth=2;cx.beginPath();cx.arc(x,y,12,0,7);
     cx.moveTo(x-22,y);cx.lineTo(x-6,y);cx.moveTo(x+6,y);cx.lineTo(x+22,y);cx.moveTo(x,y-22);cx.lineTo(x,y-6);cx.moveTo(x,y+6);cx.lineTo(x,y+22);cx.stroke();
     cx.fillStyle='#ff5a36';cx.fillRect(x-1.5,y-1.5,3,3)}}
-function hud(){if(!st.started)return;const iv=st.iv,hz=iv.length?1000/mean(iv):0,mh=st.mIv.length?1000/mean(st.mIv):0,f=st.ft;
-  const fps=f.length>1?1000*(f.length-1)/(f[f.length-1]-f[0]):0;
-  $('#hud').textContent=`orientation ${hz.toFixed(0)} Hz   jitter ${sd(iv).toFixed(1)} ms   longest gap ${Math.max(0,...iv).toFixed(0)} ms\nmotion events ${mh.toFixed(0)} Hz\nevent to frame ${mean(st.lat).toFixed(1)} ms (p95 ${pct(st.lat,.95).toFixed(1)})   ${fps.toFixed(0)} fps\nyaw ${st.ry.toFixed(2)}\u00b0   pitch ${st.rp.toFixed(2)}\u00b0   ${st.src}`}
+function hud(){if(!st.linked){$('#hud').textContent='';return}
+  const iv=st.iv,hz=iv.length?1000/mean(iv):0,f=st.ft,fps=f.length>1?1000*(f.length-1)/(f[f.length-1]-f[0]):0;
+  $('#hud').textContent=`phone sensor ${hz.toFixed(0)} Hz   jitter ${sd(iv).toFixed(1)} ms   longest gap ${Math.max(0,...iv).toFixed(0)} ms\nnetwork arrival jitter ${sd(st.ai).toFixed(1)} ms   round trip ${mean(st.rtt).toFixed(0)} ms (p95 ${pct(st.rtt,.95).toFixed(0)})\nsensor to computer frame ${mean(st.lat).toFixed(1)} ms (p95 ${pct(st.lat,.95).toFixed(1)}, estimate)   ${fps.toFixed(0)} fps\nyaw ${st.ry.toFixed(2)}\u00b0   pitch ${st.rp.toFixed(2)}\u00b0`}
 requestAnimationFrame(frame);
-showSetup();
+
+/* =============== entry =============== */
+if(qs.get('pair')){cv.style.display='none';showPhone(qs.get('pair'))}
+else showPanel(`<h1>Gyro Aim Lab</h1><p>Pair a phone with a computer. The computer shows the targets, the phone is the gun.</p><p><button class="go" onclick="startPC()">This is the computer</button> <button onclick="cv.style.display='none';showPhone()">This is the phone</button></p>`);
 </script>
 </body>
 </html>
